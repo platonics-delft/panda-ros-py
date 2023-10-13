@@ -8,7 +8,7 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from std_msgs.msg import Float32MultiArray
 import dynamic_reconfigure.client
-from franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
+from panda_ros.franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
 from panda_ros.pose_transform_functions import  array_quat_2_pose
 class Panda():
     def __init__(self):
