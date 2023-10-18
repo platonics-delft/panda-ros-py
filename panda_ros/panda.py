@@ -9,7 +9,7 @@ from geometry_msgs.msg import PoseStamped, WrenchStamped
 from std_msgs.msg import Float32MultiArray
 import dynamic_reconfigure.client
 from panda_ros.franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
-from panda_ros.pose_transform_functions import  array_quat_2_pose
+from panda_ros.pose_transform_functions import  array_quat_2_pose, list_2_quaternion, pose_2_transformation
 class Panda():
     def __init__(self):
         super(Panda, self).__init__()
@@ -19,11 +19,14 @@ class Panda():
         self.K_ns=10 ##### not being used
         self.curr_pos=None
         self.curr_ori=None
+        self.curr_pos_goal=None
+        self.curr_ori_goal=None
         self.attractor_distance_threshold=0.05
         
         self.pos_sub=rospy.Subscriber("/cartesian_pose", PoseStamped, self.ee_pos_callback)
 
         self.force_feedback_sub = rospy.Subscriber('/force_torque_ext', WrenchStamped, self.force_feedback_callback)
+        self.goal_sub = rospy.Subscriber('/equilibrium_pose', PoseStamped, self.ee_pos_goal_callback)
         self.goal_pub = rospy.Publisher('/equilibrium_pose', PoseStamped, queue_size=0)
         self.configuration_pub = rospy.Publisher('/equilibrium_configuration', Float32MultiArray, queue_size=0)
         self.grasp_pub = rospy.Publisher("/franka_gripper/grasp/goal", GraspActionGoal,
@@ -53,6 +56,10 @@ class Panda():
 
         rospy.sleep(1)
 
+    def ee_pos_goal_callback(self, goal_conf):
+        self.curr_pos_goal = np.array([goal_conf.pose.position.x, goal_conf.pose.position.y, goal_conf.pose.position.z])
+        self.curr_ori_goal = np.array([goal_conf.pose.orientation.w, goal_conf.pose.orientation.x, goal_conf.pose.orientation.y, goal_conf.pose.orientation.z])
+        
     def ee_pos_callback(self, curr_conf):
         self.curr_pos = np.array([curr_conf.pose.position.x, curr_conf.pose.position.y, curr_conf.pose.position.z])
         self.curr_ori = np.array([curr_conf.pose.orientation.w, curr_conf.pose.orientation.x, curr_conf.pose.orientation.y, curr_conf.pose.orientation.z])
@@ -106,7 +113,7 @@ class Panda():
         self.set_K.update_configuration({"nullspace_stiffness": k_ns}) 
 
     def set_stiffness_key(self):
-        self.set_stiffness(4000, 4000, 4000, 30, 30, 30, 0) ####### How to change this?
+        self.set_stiffness(4000, 4000, 4000, 30, 30, 30, 0) 
 
     def set_configuration(self, joint):
         joint_des = Float32MultiArray()
@@ -114,7 +121,7 @@ class Panda():
         self.configuration_pub.publish(joint_des)   
 
     # control robot to desired goal position
-    def go_to_pose(self, goal_pose, interp_dist=0.001, interp_dist_polar=0.001): ##### Are both interpolation distances needed?
+    def go_to_pose(self, goal_pose, interp_dist=0.001, interp_dist_polar=0.001): 
         # the goal pose should be of type PoseStamped. E.g. goal_pose=PoseStampled()
         r = rospy.Rate(100)
         start = self.curr_pos
@@ -156,5 +163,33 @@ class Panda():
             goal = array_quat_2_pose(pos_array, quat)
             self.goal_pub.publish(goal)
             r.sleep()
+        self.goal_pub.publish(goal_pose)    
         rospy.sleep(0.2)
         # self.set_stiffness(4000, 4000, 4000, 30, 30, 30, 0)
+        
+        
+
+    def offset_compensator(self, steps):
+        from quaternion_algebra.algebra import quaternion_divide, quaternion_product
+        curr_quat_desired= list_2_quaternion(np.copy(self.curr_ori_goal))
+        curr_pos_desired = np.copy(self.curr_pos_goal )
+        for _ in range(steps):
+            curr_quat_goal= list_2_quaternion(self.curr_ori_goal)
+            curr_pos_goal = self.curr_pos_goal 
+            curr_quat = list_2_quaternion(self.curr_ori)    
+            
+                    
+            quat_diff= quaternion_divide( curr_quat_desired, curr_quat) # gaol- curr
+            lin_diff = curr_pos_desired - self.curr_pos 
+            
+            
+            quat_goal_new= quaternion_product(quat_diff, curr_quat_goal)
+            goal_pos = curr_pos_goal + lin_diff
+            
+            goal_pose = array_quat_2_pose(goal_pos, quat_goal_new)
+            self.goal_pub.publish(goal_pose) 
+            print("new pose goal")
+            print(goal_pose)
+            rospy.sleep(0.2)
+        
+        
