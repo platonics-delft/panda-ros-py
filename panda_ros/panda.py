@@ -156,7 +156,7 @@ class Panda():
         z = np.linspace(start[2], goal_pose.pose.position.z, step_num)
 
         goal = PoseStamped()
-        # self.set_stiffness(4000, 4000, 4000, 50, 50, 50, 0)
+        self.set_stiffness(4000, 4000, 4000, 50, 50, 50, 0)
         for i in range(step_num):
             quat=np.slerp_vectorized(q_start, q_goal, (i+1)/step_num)
             pos_array = np.array([x[i], y[i], z[i]])
@@ -165,8 +165,8 @@ class Panda():
             r.sleep()
         self.goal_pub.publish(goal_pose)    
         rospy.sleep(0.2)
-        # self.set_stiffness(4000, 4000, 4000, 30, 30, 30, 0)
         
+        self.offset_compensator(10)
         
 
     def offset_compensator(self, steps):
@@ -179,7 +179,7 @@ class Panda():
             curr_quat = list_2_quaternion(self.curr_ori)    
             
                     
-            quat_diff= quaternion_divide( curr_quat_desired, curr_quat) # gaol- curr
+            quat_diff= quaternion_divide( curr_quat_desired, curr_quat) 
             lin_diff = curr_pos_desired - self.curr_pos 
             
             
@@ -188,8 +188,8 @@ class Panda():
             
             goal_pose = array_quat_2_pose(goal_pos, quat_goal_new)
             self.goal_pub.publish(goal_pose) 
-            print("new pose goal")
-            print(goal_pose)
+            # print("new pose goal")
+            # print(goal_pose)
             rospy.sleep(0.2)
         
         
