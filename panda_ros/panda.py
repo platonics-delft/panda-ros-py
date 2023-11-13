@@ -9,7 +9,7 @@ from geometry_msgs.msg import PoseStamped, WrenchStamped
 from std_msgs.msg import Float32MultiArray
 import dynamic_reconfigure.client
 from panda_ros.franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
-from panda_ros.pose_transform_functions import  array_quat_2_pose, list_2_quaternion, pose_2_transformation
+from panda_ros.pose_transform_functions import  array_quat_2_pose, list_2_quaternion, pose_2_transformation, position_2_array, orientation_2_quaternion
 class Panda():
     def __init__(self):
         super(Panda, self).__init__()
@@ -22,6 +22,8 @@ class Panda():
         self.curr_pos_goal=None
         self.curr_ori_goal=None
         self.attractor_distance_threshold=0.05
+        self.max_force=9 #[N]
+        self.force_min_exit=1 #[N]
         
         self.pos_sub=rospy.Subscriber("/cartesian_pose", PoseStamped, self.ee_pos_callback)
 
@@ -73,16 +75,18 @@ class Panda():
         self.grasp_pub.publish(self.grasp_command)
 
     def home(self):
-        pos_array = np.array([0.6, 0, 0.4])
-        quat = np.quaternion(0, 1, 0, 0)
+        pos_array = np.array([0.6, 0, 0.4]) # home position
+        quat = np.quaternion(0, 1, 0, 0) # home orientation
         goal = array_quat_2_pose(pos_array, quat)
         goal.header.seq = 1
         goal.header.stamp = rospy.Time.now()
 
-        ns_msg = [0, 0, 0, -2.4, 0, 2.4, 0]
+        ns_msg = [0, 0, 0, -2.4, 0, 2.4, 0] # home joint configuration
         self.go_to_pose(goal)
         self.set_configuration(ns_msg)
         self.set_K.update_configuration({"nullspace_stiffness":10})
+
+        self.offset_compensator(10)
 
         rospy.sleep(rospy.Duration(secs=5))
 
@@ -121,9 +125,10 @@ class Panda():
         self.configuration_pub.publish(joint_des)   
 
     # control robot to desired goal position
-    def go_to_pose(self, goal_pose, interp_dist=0.001, interp_dist_polar=0.001): 
+    def go_to_pose(self, goal_pose, do_spiral_search=True, interp_dist=0.001, interp_dist_polar=0.001): 
         # the goal pose should be of type PoseStamped. E.g. goal_pose=PoseStampled()
-        r = rospy.Rate(100)
+        control_rate=100
+        r = rospy.Rate(control_rate)
         start = self.curr_pos
         start_ori = self.curr_ori
         goal_array = np.array([goal_pose.pose.position.x, goal_pose.pose.position.y, goal_pose.pose.position.z])
@@ -157,18 +162,54 @@ class Panda():
 
         goal = PoseStamped()
         self.set_stiffness(4000, 4000, 4000, 50, 50, 50, 0)
+
         for i in range(step_num):
             quat=np.slerp_vectorized(q_start, q_goal, (i+1)/step_num)
             pos_array = np.array([x[i], y[i], z[i]])
             goal = array_quat_2_pose(pos_array, quat)
+
+            if self.force.z > self.max_force and do_spiral_search:
+                spiral_success, offset_correction = self.spiral_search(goal)
+                self.spiralling_occured = True
+                if spiral_success:
+                    x[i:] += offset_correction[0]
+                    y[i:] += offset_correction[1]
+
             self.goal_pub.publish(goal)
             r.sleep()
         self.goal_pub.publish(goal_pose)    
         rospy.sleep(0.2)
         
-        self.offset_compensator(10)
-        
 
+    def spiral_search(self, goal, control_rate=20):
+        r = rospy.Rate(control_rate)
+        max_spiral_time = 30 # seconds
+        increase_radius_per_second = 0.0005 # meters, distance from center of the spiral after 1 second
+        rounds_per_second = 1 # how many rounds does the spiral every second
+        dt = 1. / control_rate
+        goal_init = position_2_array(goal.pose.position)
+        pos_init = self.curr_pos
+        ori_quat = orientation_2_quaternion(goal.pose.orientation)
+        goal_pose = array_quat_2_pose(goal_init, ori_quat)
+        time= 0
+        spiral_success = False
+        self.set_stiffness(4000, 4000, 1000, 30, 30, 30, 0) # get more compliant in z direction
+        for _ in range(max_spiral_time * control_rate):   
+            goal_pose.pose.position.x = pos_init[0] + np.cos(
+                2 * np.pi *rounds_per_second*time) * increase_radius_per_second * time
+            goal_pose.pose.position.y = pos_init[1] + np.sin(
+                2 * np.pi *rounds_per_second* time) * increase_radius_per_second * time
+            self.goal_pub.publish(goal_pose)
+            if self.force.z <= self.force_min_exit: 
+                spiral_success = True
+                break
+            time += dt
+            self.r.sleep()
+        self.set_stiffness(4000, 4000, 4000, 50, 50, 50, 0)    
+        offset_correction = self.curr_pos - goal_init
+
+        return spiral_success, offset_correction
+    
     def offset_compensator(self, steps):
         from quaternion_algebra.algebra import quaternion_divide, quaternion_product
         curr_quat_desired= list_2_quaternion(np.copy(self.curr_ori_goal))
