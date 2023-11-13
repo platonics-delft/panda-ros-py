@@ -204,7 +204,7 @@ class Panda():
                 spiral_success = True
                 break
             time += dt
-            self.r.sleep()
+            r.sleep()
         self.set_stiffness(4000, 4000, 4000, 50, 50, 50, 0)    
         offset_correction = self.curr_pos - goal_init
 
