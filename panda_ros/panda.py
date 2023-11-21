@@ -89,6 +89,7 @@ class Panda():
         rospy.sleep(rospy.Duration(secs=5))
 
         self.set_K.update_configuration({"nullspace_stiffness":0})
+        self.offset_compensator(10)
 
     def home_gripper(self):
         self.homing_pub.publish(self.home_command)
@@ -168,7 +169,7 @@ class Panda():
         self.goal_pub.publish(goal_pose)    
         rospy.sleep(0.2)
         
-        self.offset_compensator(10)
+        
         
 
     def offset_compensator(self, steps):
