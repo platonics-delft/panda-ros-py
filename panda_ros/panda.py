@@ -57,10 +57,12 @@ class Panda():
         rospy.sleep(1)
 
     def ee_pos_goal_callback(self, goal_conf):
+        self.eq_pose = goal_conf
         self.curr_pos_goal = np.array([goal_conf.pose.position.x, goal_conf.pose.position.y, goal_conf.pose.position.z])
         self.curr_ori_goal = np.array([goal_conf.pose.orientation.w, goal_conf.pose.orientation.x, goal_conf.pose.orientation.y, goal_conf.pose.orientation.z])
         
     def ee_pos_callback(self, curr_conf):
+        self.curr_pose= curr_conf
         self.curr_pos = np.array([curr_conf.pose.position.x, curr_conf.pose.position.y, curr_conf.pose.position.z])
         self.curr_ori = np.array([curr_conf.pose.orientation.w, curr_conf.pose.orientation.x, curr_conf.pose.orientation.y, curr_conf.pose.orientation.z])
 
@@ -73,7 +75,7 @@ class Panda():
         self.grasp_pub.publish(self.grasp_command)
 
     def home(self):
-        pos_array = np.array([0.6, 0, 0.4])
+        pos_array = np.array([0.4, 0, 0.25])
         quat = np.quaternion(0, 1, 0, 0)
         goal = array_quat_2_pose(pos_array, quat)
         goal.header.seq = 1
