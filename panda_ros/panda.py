@@ -89,7 +89,6 @@ class Panda():
         rospy.sleep(rospy.Duration(secs=5))
 
         self.set_K.update_configuration({"nullspace_stiffness":0})
-        self.offset_compensator(10)
 
     def home_gripper(self):
         self.homing_pub.publish(self.home_command)
@@ -158,7 +157,6 @@ class Panda():
         z = np.linspace(start[2], goal_pose.pose.position.z, step_num)
 
         goal = PoseStamped()
-        self.set_stiffness(4000, 4000, 4000, 50, 50, 50, 0)
         for i in range(step_num):
             quat=np.slerp_vectorized(q_start, q_goal, (i+1)/step_num)
             pos_array = np.array([x[i], y[i], z[i]])
