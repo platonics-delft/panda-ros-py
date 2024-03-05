@@ -74,8 +74,8 @@ class Panda():
         self.grasp_command.goal.width = width
         self.grasp_pub.publish(self.grasp_command)
 
-    def home(self):
-        pos_array = np.array([0.4, 0, 0.25])
+    def home(self, height=0.25):
+        pos_array = np.array([0.4, 0, height])
         quat = np.quaternion(0, 1, 0, 0)
         goal = array_quat_2_pose(pos_array, quat)
         goal.header.seq = 1
