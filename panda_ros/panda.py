@@ -74,14 +74,21 @@ class Panda():
         self.grasp_command.goal.width = width
         self.grasp_pub.publish(self.grasp_command)
 
-    def home(self, height=0.25):
-        pos_array = np.array([0.4, 0, height])
+    def home(self, height=0.25, front_offset=0.4, side_offset=0.0):
+        start = self.curr_pos
+        start_ori = self.curr_ori
+        q_start=np.quaternion(start_ori[0], start_ori[1], start_ori[2], start_ori[3])
+        goal = array_quat_2_pose(start, q_start)
+        self.goal_pub.publish(goal)
+        self.set_stiffness(1000, 1000, 1000, 30, 30, 30, 0)
+
+        pos_array = np.array([front_offset, side_offset, height])
         quat = np.quaternion(0, 1, 0, 0)
         goal = array_quat_2_pose(pos_array, quat)
         goal.header.seq = 1
         goal.header.stamp = rospy.Time.now()
 
-        ns_msg = [0, 0, 0, -2.4, 0, 2.4, 0]
+        ns_msg = [0, 0, 0, -2.4, 0, 2.4, 0] #ensure that the elbow is upward
         self.go_to_pose(goal)
         self.set_configuration(ns_msg)
         self.set_K.update_configuration({"nullspace_stiffness":10})
