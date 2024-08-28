@@ -10,18 +10,26 @@ from std_msgs.msg import Float32MultiArray
 import dynamic_reconfigure.client
 from panda_ros.franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
 from panda_ros.pose_transform_functions import  array_quat_2_pose, list_2_quaternion, pose_2_transformation
+from spatialmath import SE3 #pip install spatialmath-python
+from spatialmath.base import q2r
+import roboticstoolbox as rtb #pip install roboticstoolbox-python
 class Panda():
     def __init__(self):
         super(Panda, self).__init__()
 
-        self.K_pos=1000
-        self.K_ori=30
-        self.K_ns=10 ##### not being used
+        self.K_pos=4000
+        self.K_ori=40
+        self.K_ns=30
+        self.K_pos_safe=600
+        self.K_ori_safe=0
+
         self.curr_pos=None
         self.curr_ori=None
         self.curr_pos_goal=None
         self.curr_ori_goal=None
-        self.attractor_distance_threshold=0.05
+        self.attractor_distance_threshold=0.02
+        self.safety_check=True
+
         
         self.pos_sub=rospy.Subscriber("/cartesian_pose", PoseStamped, self.ee_pos_callback)
 
@@ -60,6 +68,7 @@ class Panda():
         self.eq_pose = goal_conf
         self.curr_pos_goal = np.array([goal_conf.pose.position.x, goal_conf.pose.position.y, goal_conf.pose.position.z])
         self.curr_ori_goal = np.array([goal_conf.pose.orientation.w, goal_conf.pose.orientation.x, goal_conf.pose.orientation.y, goal_conf.pose.orientation.z])
+        self.safety_checker()
         
     def ee_pos_callback(self, curr_conf):
         self.curr_pose= curr_conf
@@ -80,7 +89,7 @@ class Panda():
         q_start=np.quaternion(start_ori[0], start_ori[1], start_ori[2], start_ori[3])
         goal = array_quat_2_pose(start, q_start)
         self.goal_pub.publish(goal)
-        self.set_stiffness(1000, 1000, 1000, 30, 30, 30, 0)
+        self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, self.K_ori, self.K_ori, self.K_ori, 0)
 
         pos_array = np.array([front_offset, side_offset, height])
         quat = np.quaternion(0, 1, 0, 0)
@@ -88,14 +97,8 @@ class Panda():
         goal.header.seq = 1
         goal.header.stamp = rospy.Time.now()
 
-        ns_msg = [0, 0, 0, -2.4, 0, 2.4, 0] #ensure that the elbow is upward
-        self.go_to_pose(goal)
-        self.set_configuration(ns_msg)
-        self.set_K.update_configuration({"nullspace_stiffness":10})
-
-        rospy.sleep(rospy.Duration(secs=5))
-
-        self.set_K.update_configuration({"nullspace_stiffness":0})
+        ns_msg = [0, 0, 0, -2.4, 0, 2.4, 0.8] #ensure that the elbow is upward
+        self.go_to_pose_ik(goal, goal_configuration=ns_msg)
 
     def home_gripper(self):
         self.homing_pub.publish(self.home_command)
@@ -110,7 +113,11 @@ class Panda():
     def joint_states_callback(self, data):
         self.curr_joint = data.position[:7]
         self.gripper_width = data.position[7] + data.position[8]
-        
+    
+    def set_configuration(self,joint):
+        joint_des=Float32MultiArray()
+        joint_des.data= np.array(joint).astype(np.float32)
+        self.configuration_pub.publish(joint_des)
     def set_stiffness(self, k_t1, k_t2, k_t3,k_r1,k_r2,k_r3, k_ns):
         
         self.set_K.update_configuration({"translational_stiffness_X": k_t1})
@@ -120,14 +127,6 @@ class Panda():
         self.set_K.update_configuration({"rotational_stiffness_Y": k_r2}) 
         self.set_K.update_configuration({"rotational_stiffness_Z": k_r3})
         self.set_K.update_configuration({"nullspace_stiffness": k_ns}) 
-
-    def set_stiffness_key(self):
-        self.set_stiffness(4000, 4000, 4000, 30, 30, 30, 0) 
-
-    def set_configuration(self, joint):
-        joint_des = Float32MultiArray()
-        joint_des.data = np.array(joint).astype(np.float32)
-        self.configuration_pub.publish(joint_des)   
 
     # control robot to desired goal position
     def go_to_pose(self, goal_pose, interp_dist=0.001, interp_dist_polar=0.001): 
@@ -172,12 +171,88 @@ class Panda():
             r.sleep()
         self.goal_pub.publish(goal_pose)    
         rospy.sleep(0.2)
+    
+        # control robot to desired goal position
+    def go_to_pose_ik(self, goal_pose, goal_configuration=None, interp_dist=0.003, interp_dist_joint=0.05): 
+        # the goal pose should be of type PoseStamped. E.g. goal_pose=PoseStampled()
+        self.set_K.update_configuration({"max_delta_lin": 0.2})
+        self.set_K.update_configuration({"max_delta_ori": 0.5}) 
+        r = rospy.Rate(100)
+
+        robot = rtb.models.Panda()
+        position_start = self.curr_pos
+        joint_start = np.array(self.curr_joint)
+        ori_start = self.curr_ori
+        goal_array = np.array([goal_pose.pose.position.x, goal_pose.pose.position.y, goal_pose.pose.position.z])
+
+        # interpolate from start to goal with attractor distance of approx 1 cm
+        dist = np.sqrt(np.sum(np.subtract(position_start, goal_array)**2, axis=0))
         
+        step_num_lin = math.floor(dist / interp_dist)
+        q_goal=np.quaternion(goal_pose.pose.orientation.w, goal_pose.pose.orientation.x, goal_pose.pose.orientation.y, goal_pose.pose.orientation.z)
+        if goal_configuration is None:
+            quaternion_array = np.array([goal_pose.pose.orientation.w, goal_pose.pose.orientation.x, goal_pose.pose.orientation.y, goal_pose.pose.orientation.z]) 
+            # Convert quaternion to rotation matrix
+            rotation_matrix = q2r(quaternion_array)
+            T = SE3.Rt(rotation_matrix, goal_array)
+
+            # Solve inverse kinematics, try 5 times
+            for i in range(5):
+                # sol = robot.ikine_LM(T, q0=joint_start)
+                sol = robot.ikine_LM(T,q0=joint_start)
+                if sol.success:
+                    goal_configuration = sol.q  # Joint configuration
+                    print("Feasible joint configuration found")
+                    break
+            if not sol.success:
+                for i in range(5):
+                    sol = robot.ikine_LM(T)
+                    if sol.success:
+                        goal_configuration = sol.q  # Joint configuration
+                        print("Feasible joint configuration found")
+                        break
+
+        # Check if the solution is valid
+        if goal_configuration is not None:
+             
+            step_num_joint = math.floor(np.linalg.norm(goal_configuration - joint_start) / interp_dist_joint)
+            step_num=np.max([step_num_joint,step_num_lin])
         
+            pos_goal = np.vstack([np.linspace(start, end, step_num) for start, end in zip(position_start, [goal_pose.pose.position.x, goal_pose.pose.position.y, goal_pose.pose.position.z])]).T
+            joint_goal = np.vstack([np.linspace(start, end, step_num) for start, end in zip(joint_start, goal_configuration)]).T
+
+            self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, 0)
+            rospy.sleep(1)
+            self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
+            i=0
+            while i < step_num:
+                pose_goal = array_quat_2_pose(pos_goal[i], q_goal)  
+                self.goal_pub.publish(pose_goal)
+                self.set_configuration(joint_goal[i])
+                r.sleep()  
+                if self.safety_check:
+                    i= i+1 
+                    self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
+                    self.set_K.update_configuration({"max_delta_lin": 0.2})
+                    self.set_K.update_configuration({"max_delta_ori": 0.5}) 
+                else:
+                    self.set_stiffness(self.K_pos_safe, self.K_pos_safe, self.K_pos_safe, 0, 0, 0, 5)
+                    self.set_K.update_configuration({"max_delta_lin": 0.05})
+                    self.set_K.update_configuration({"max_delta_ori": 0.1})    
+            self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, self.K_ori, self.K_ori, self.K_ori, 0)
+            rospy.sleep(1) 
+
+        else:
+            print("No feasible joint configuration found or no joint configuration provided")
         
+    def safety_checker(self):
+        distance_pos = np.linalg.norm(self.curr_pos_goal - self.curr_pos)
+        if distance_pos < self.attractor_distance_threshold:
+            self.safety_check = True
+        else:
+            self.safety_check = False
 
     def offset_compensator(self, steps):
-        from quaternion_algebra.algebra import quaternion_divide, quaternion_product
         curr_quat_desired= list_2_quaternion(np.copy(self.curr_ori_goal))
         curr_pos_desired = np.copy(self.curr_pos_goal )
         for _ in range(steps):
@@ -186,17 +261,15 @@ class Panda():
             curr_quat = list_2_quaternion(self.curr_ori)    
             
                     
-            quat_diff= quaternion_divide( curr_quat_desired, curr_quat) 
+            quat_diff = curr_quat_desired * curr_quat.inverse() 
             lin_diff = curr_pos_desired - self.curr_pos 
             
             
-            quat_goal_new= quaternion_product(quat_diff, curr_quat_goal)
+            quat_goal_new = quat_diff * curr_quat_goal
             goal_pos = curr_pos_goal + lin_diff
             
             goal_pose = array_quat_2_pose(goal_pos, quat_goal_new)
             self.goal_pub.publish(goal_pose) 
-            # print("new pose goal")
-            # print(goal_pose)
-            rospy.sleep(0.2)
+            rospy.sleep(0.5)
         
         
