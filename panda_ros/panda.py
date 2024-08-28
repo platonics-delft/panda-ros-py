@@ -65,7 +65,7 @@ class Panda():
         rospy.sleep(1)
 
     def ee_pos_goal_callback(self, goal_conf):
-        self.eq_pose = goal_conf
+        self.goal_pose = goal_conf
         self.curr_pos_goal = np.array([goal_conf.pose.position.x, goal_conf.pose.position.y, goal_conf.pose.position.z])
         self.curr_ori_goal = np.array([goal_conf.pose.orientation.w, goal_conf.pose.orientation.x, goal_conf.pose.orientation.y, goal_conf.pose.orientation.z])
         self.safety_checker()

@@ -58,3 +58,9 @@ def transform_pos_ori(pos: np.array, ori, transform):
 def list_2_quaternion(quaternion_list: list):
     return np.quaternion(quaternion_list[0], quaternion_list[1], quaternion_list[2], quaternion_list[3])
 
+def transform_between_poses(pose2: PoseStamped, pose1: PoseStamped):
+    pose1_matrix = pose_st_2_transformation(pose1)
+    pose2_matrix = pose_st_2_transformation(pose2)
+    transform=pose2_matrix @ np.linalg.inv(pose1_matrix)
+    return transform
+
