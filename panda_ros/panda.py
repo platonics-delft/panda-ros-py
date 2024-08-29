@@ -192,8 +192,11 @@ class Panda():
         q_goal=np.quaternion(goal_pose.pose.orientation.w, goal_pose.pose.orientation.x, goal_pose.pose.orientation.y, goal_pose.pose.orientation.z)
         if goal_configuration is None:
             quaternion_array = np.array([goal_pose.pose.orientation.w, goal_pose.pose.orientation.x, goal_pose.pose.orientation.y, goal_pose.pose.orientation.z]) 
+            # normalize quaternion
+            quaternion_array = quaternion_array / np.linalg.norm(quaternion_array)
             # Convert quaternion to rotation matrix
             rotation_matrix = q2r(quaternion_array)
+
             T = SE3.Rt(rotation_matrix, goal_array)
 
             # Solve inverse kinematics, try 5 times
