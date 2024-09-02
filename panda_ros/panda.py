@@ -17,18 +17,20 @@ class Panda():
     def __init__(self):
         super(Panda, self).__init__()
 
-        self.K_pos=4000
-        self.K_ori=40
+        self.K_pos=2000
+        self.K_ori=30
         self.K_ns=30
         self.K_pos_safe=600
-        self.K_ori_safe=0
+        self.K_ori_safe=10
 
         self.curr_pos=None
         self.curr_ori=None
         self.curr_pos_goal=None
         self.curr_ori_goal=None
-        self.attractor_distance_threshold=0.02
+        self.attractor_distance_threshold=0.05
         self.safety_check=True
+        self.previous_safety_check=True
+        self.change_in_safety_check=False
 
         
         self.pos_sub=rospy.Subscriber("/cartesian_pose", PoseStamped, self.ee_pos_callback)
@@ -229,17 +231,21 @@ class Panda():
                 pose_goal = array_quat_2_pose(pos_goal[i], q_goal)  
                 self.goal_pub.publish(pose_goal)
                 self.set_configuration(joint_goal[i])
-                r.sleep()  
                 if self.safety_check:
                     i= i+1 
-                    self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
-                    self.set_K.update_configuration({"max_delta_lin": 0.2})
-                    self.set_K.update_configuration({"max_delta_ori": 0.5}) 
-                else:
-                    self.set_stiffness(self.K_pos_safe, self.K_pos_safe, self.K_pos_safe, 0, 0, 0, 5)
-                    self.set_K.update_configuration({"max_delta_lin": 0.05})
-                    self.set_K.update_configuration({"max_delta_ori": 0.1})    
+                
+                if self.change_in_safety_check:
+                    if self.safety_check:
+                        self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
+                        self.set_K.update_configuration({"max_delta_lin": 0.2})
+                        self.set_K.update_configuration({"max_delta_ori": 0.5}) 
+                    else:
+                        self.set_stiffness(self.K_pos_safe, self.K_pos_safe, self.K_pos_safe, 0, 0, 0, 5)
+                        self.set_K.update_configuration({"max_delta_lin": 0.05})
+                        self.set_K.update_configuration({"max_delta_ori": 0.1})   
+                r.sleep()
             self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, self.K_ori, self.K_ori, self.K_ori, 0)
+
             rospy.sleep(1) 
 
         else:
@@ -251,6 +257,10 @@ class Panda():
             self.safety_check = True
         else:
             self.safety_check = False
+        if self.safety_check != self.previous_safety_check:
+            self.change_in_safety_check = True
+        self.previous_safety_check = self.safety_check
+
 
     def offset_compensator(self, steps):
         curr_quat_desired= list_2_quaternion(np.copy(self.curr_ori_goal))
