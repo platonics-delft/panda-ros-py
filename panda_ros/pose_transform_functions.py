@@ -17,7 +17,7 @@ def pose_2_transformation(pose: Pose):
     transformation_matrix[0:3, 3] = translation
     return transformation_matrix
 
-def array_quat_2_pose(pos_array, quat):
+def pos_quat_2_pose_st(pos_array, quat):
     pose_st = PoseStamped()
     pose_st.pose.position.x = pos_array[0]
     pose_st.pose.position.y = pos_array[1]
@@ -32,7 +32,7 @@ def transformation_2_pose(transformation_matrix):
     pos_array = transformation_matrix[0:3, 3]
     rotation_matrix = transformation_matrix[0:3, 0:3]
     quat = quaternion.from_rotation_matrix(rotation_matrix)
-    pose_st = array_quat_2_pose(pos_array, quat)
+    pose_st = pos_quat_2_pose_st(pos_array, quat)
     return pose_st
 
 def pose_st_2_transformation(pose_st: PoseStamped):
@@ -64,3 +64,35 @@ def transform_between_poses(pose2: PoseStamped, pose1: PoseStamped):
     transform=pose2_matrix @ np.linalg.inv(pose1_matrix)
     return transform
 
+def interpolate_poses(pose_start: PoseStamped, pose_goal: PoseStamped, interp_dist_linear, interp_dist_polar):
+    position_goal = np.array([pose_goal.pose.position.x, pose_goal.pose.position.y, pose_goal.pose.position.z])
+    position_start = np.array([pose_start.pose.position.x, pose_start.pose.position.y, pose_start.pose.position.z])
+    dist_lin = np.sqrt(np.sum(np.subtract(position_start, position_goal)**2))
+    # dist = np.sqrt(np.sum(np.subtract(start, goal_array)**2, axis=0))
+    
+    step_num_lin = int(np.ceil(dist_lin / interp_dist_linear))
+    quaternion_start = list_2_quaternion([pose_start.pose.orientation.w, pose_start.pose.orientation.x, pose_start.pose.orientation.y, pose_start.pose.orientation.z])
+    quaternion_goal = list_2_quaternion([pose_goal.pose.orientation.w, pose_goal.pose.orientation.x, pose_goal.pose.orientation.y, pose_goal.pose.orientation.z])
+
+    inner_prod= quaternion_start.x * quaternion_goal.x + quaternion_start.y * quaternion_goal.y + quaternion_start.z * quaternion_goal.z + quaternion_start.w * quaternion_goal.w
+    # print(inner_prod)
+    if inner_prod < 0: quaternion_start = -quaternion_start
+    inner_prod= quaternion_start.x * quaternion_goal.x + quaternion_start.y * quaternion_goal.y + quaternion_start.z * quaternion_goal.z + quaternion_start.w * quaternion_goal.w
+    theta= np.arccos(np.abs(inner_prod))
+    
+    step_num_polar = int(np.ceil(theta / interp_dist_polar))
+    
+    step_num=np.max([step_num_polar,step_num_lin]) + 1
+    
+    x = np.linspace(position_start[0], position_goal[0], step_num)
+    y = np.linspace(position_start[1], position_goal[1], step_num)
+    z = np.linspace(position_start[2], position_goal[2], step_num)
+
+    poses = []
+    for i in range(step_num):
+        pos=np.array([x[i], y[i], z[i]])
+        quat=np.slerp_vectorized(quaternion_start, quaternion_goal, i/(step_num-1))
+        pose_st = pos_quat_2_pose_st(pos, quat)
+        poses.append(pose_st)
+
+    return poses

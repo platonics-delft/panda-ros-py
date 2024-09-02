@@ -9,7 +9,7 @@ from geometry_msgs.msg import PoseStamped, WrenchStamped
 from std_msgs.msg import Float32MultiArray
 import dynamic_reconfigure.client
 from panda_ros.franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
-from panda_ros.pose_transform_functions import  array_quat_2_pose, list_2_quaternion, pose_2_transformation
+from panda_ros.pose_transform_functions import  pos_quat_2_pose_st, list_2_quaternion, pose_2_transformation, interpolate_poses
 from spatialmath import SE3 #pip install spatialmath-python
 from spatialmath.base import q2r
 import roboticstoolbox as rtb #pip install roboticstoolbox-python
@@ -86,16 +86,12 @@ class Panda():
         self.grasp_pub.publish(self.grasp_command)
 
     def home(self, height=0.25, front_offset=0.4, side_offset=0.0):
-        start = self.curr_pos
-        start_ori = self.curr_ori
-        q_start=np.quaternion(start_ori[0], start_ori[1], start_ori[2], start_ori[3])
-        goal = array_quat_2_pose(start, q_start)
-        self.goal_pub.publish(goal)
+        self.goal_pub.publish(self.curr_pose)
         self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, self.K_ori, self.K_ori, self.K_ori, 0)
 
         pos_array = np.array([front_offset, side_offset, height])
         quat = np.quaternion(0, 1, 0, 0)
-        goal = array_quat_2_pose(pos_array, quat)
+        goal = pos_quat_2_pose_st(pos_array, quat)
         goal.header.seq = 1
         goal.header.stamp = rospy.Time.now()
 
@@ -131,60 +127,27 @@ class Panda():
         self.set_K.update_configuration({"nullspace_stiffness": k_ns}) 
 
     # control robot to desired goal position
-    def go_to_pose(self, goal_pose, interp_dist=0.001, interp_dist_polar=0.001): 
+    def go_to_pose(self, goal_pose: PoseStamped, interp_dist=0.001, interp_dist_polar=0.001): 
         # the goal pose should be of type PoseStamped. E.g. goal_pose=PoseStampled()
         r = rospy.Rate(100)
-        start = self.curr_pos
-        start_ori = self.curr_ori
-        goal_array = np.array([goal_pose.pose.position.x, goal_pose.pose.position.y, goal_pose.pose.position.z])
-
-        # interpolate from start to goal with attractor distance of approx 1 cm
-        dist = np.sqrt(np.sum(np.subtract(start, goal_array)**2, axis=0))
         
-        step_num_lin = math.floor(dist / interp_dist)
-
-        q_start=np.quaternion(start_ori[0], start_ori[1], start_ori[2], start_ori[3])
-        
-        q_goal=np.quaternion(goal_pose.pose.orientation.w, goal_pose.pose.orientation.x, goal_pose.pose.orientation.y, goal_pose.pose.orientation.z)
-        
-        inner_prod=q_start.x*q_goal.x+q_start.y*q_goal.y+q_start.z*q_goal.z+q_start.w*q_goal.w
-        if inner_prod < 0:
-            q_start.x=-q_start.x
-            q_start.y=-q_start.y
-            q_start.z=-q_start.z
-            q_start.w=-q_start.w
-        inner_prod=q_start.x*q_goal.x+q_start.y*q_goal.y+q_start.z*q_goal.z+q_start.w*q_goal.w
-        theta= np.arccos(np.abs(inner_prod))
-        
-        step_num_polar = math.floor(theta / interp_dist_polar)
-        
-        step_num=np.max([step_num_polar,step_num_lin])
-        
-        x = np.linspace(start[0], goal_pose.pose.position.x, step_num)
-        y = np.linspace(start[1], goal_pose.pose.position.y, step_num)
-        z = np.linspace(start[2], goal_pose.pose.position.z, step_num)
-
-        goal = PoseStamped()
-        for i in range(step_num):
-            quat=np.slerp_vectorized(q_start, q_goal, (i+1)/step_num)
-            pos_array = np.array([x[i], y[i], z[i]])
-            goal = array_quat_2_pose(pos_array, quat)
-            self.goal_pub.publish(goal)
+        poses=  interpolate_poses(self.curr_pose, goal_pose, interp_dist, interp_dist_polar)
+        for pose in poses:
+            self.goal_pub.publish(pose)
             r.sleep()
         self.goal_pub.publish(goal_pose)    
         rospy.sleep(0.2)
     
         # control robot to desired goal position
-    def go_to_pose_ik(self, goal_pose, goal_configuration=None, interp_dist=0.003, interp_dist_joint=0.05): 
+    def go_to_pose_ik(self, goal_pose: PoseStamped, goal_configuration=None, interp_dist=0.003, interp_dist_joint=0.05): 
         # the goal pose should be of type PoseStamped. E.g. goal_pose=PoseStampled()
-        self.set_K.update_configuration({"max_delta_lin": 0.2})
-        self.set_K.update_configuration({"max_delta_ori": 0.5}) 
+        # self.set_K.update_configuration({"max_delta_lin": 0.2})
+        # self.set_K.update_configuration({"max_delta_ori": 0.5}) 
         r = rospy.Rate(100)
 
         robot = rtb.models.Panda()
         position_start = self.curr_pos
         joint_start = np.array(self.curr_joint)
-        ori_start = self.curr_ori
         goal_array = np.array([goal_pose.pose.position.x, goal_pose.pose.position.y, goal_pose.pose.position.z])
 
         # interpolate from start to goal with attractor distance of approx 1 cm
@@ -220,18 +183,18 @@ class Panda():
         # Check if the solution is valid
         if goal_configuration is not None:
              
-            step_num_joint = math.floor(np.linalg.norm(goal_configuration - joint_start) / interp_dist_joint)
-            step_num=np.max([step_num_joint,step_num_lin])
+            step_num_joint = int(np.ceil(np.linalg.norm(goal_configuration - joint_start) / interp_dist_joint))
+            step_num=np.max([step_num_joint,step_num_lin])+1
         
             pos_goal = np.vstack([np.linspace(start, end, step_num) for start, end in zip(position_start, [goal_pose.pose.position.x, goal_pose.pose.position.y, goal_pose.pose.position.z])]).T
             joint_goal = np.vstack([np.linspace(start, end, step_num) for start, end in zip(joint_start, goal_configuration)]).T
 
-            self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, 0)
-            rospy.sleep(1)
+            # self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, 0)
+            rospy.sleep(0.2)
             self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
             i=0
             while i < step_num:
-                pose_goal = array_quat_2_pose(pos_goal[i], q_goal)  
+                pose_goal = pos_quat_2_pose_st(pos_goal[i], q_goal)  
                 self.goal_pub.publish(pose_goal)
                 self.set_configuration(joint_goal[i])
                 if self.safety_check:
@@ -240,12 +203,12 @@ class Panda():
                 if self.change_in_safety_check:
                     if self.safety_check:
                         self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
-                        self.set_K.update_configuration({"max_delta_lin": 0.2})
-                        self.set_K.update_configuration({"max_delta_ori": 0.5}) 
+                        # self.set_K.update_configuration({"max_delta_lin": 0.2})
+                        # self.set_K.update_configuration({"max_delta_ori": 0.5}) 
                     else:
                         self.set_stiffness(self.K_pos_safe, self.K_pos_safe, self.K_pos_safe, 0, 0, 0, 5)
-                        self.set_K.update_configuration({"max_delta_lin": 0.05})
-                        self.set_K.update_configuration({"max_delta_ori": 0.1})   
+                        # self.set_K.update_configuration({"max_delta_lin": 0.05})
+                        # self.set_K.update_configuration({"max_delta_ori": 0.1})   
                 r.sleep()
             self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, self.K_ori, self.K_ori, self.K_ori, 0)
 
@@ -281,7 +244,7 @@ class Panda():
             quat_goal_new = quat_diff * curr_quat_goal
             goal_pos = curr_pos_goal + lin_diff
             
-            goal_pose = array_quat_2_pose(goal_pos, quat_goal_new)
+            goal_pose = pos_quat_2_pose_st(goal_pos, quat_goal_new)
             self.goal_pub.publish(goal_pose) 
             rospy.sleep(0.5)
         
