@@ -6,7 +6,7 @@ import numpy as np
 import quaternion # pip install numpy-quaternion
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, WrenchStamped
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, Float32
 import dynamic_reconfigure.client
 from panda_ros.franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
 from panda_ros.pose_transform_functions import  pos_quat_2_pose_st, list_2_quaternion, pose_2_transformation, interpolate_poses
@@ -47,6 +47,8 @@ class Panda():
                                           queue_size=0)
         self.stop_pub = rospy.Publisher("/franka_gripper/stop/goal", StopActionGoal,
                                           queue_size=0)
+
+        self.vibration_pub = rospy.Publisher("/haptic_feedback", Float32, queue_size=0)
         
         self.force_feedback = 0.
         self.set_K = dynamic_reconfigure.client.Client('/dynamic_reconfigure_compliance_param_node', config_callback=None)
@@ -249,3 +251,5 @@ class Panda():
             rospy.sleep(0.5)
         
         
+    def vibrate(self, duration: Float32):   
+        self.vibration_pub.publish(duration)
