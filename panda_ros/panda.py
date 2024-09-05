@@ -143,7 +143,7 @@ class Panda():
         rospy.sleep(0.2)
     
         # control robot to desired goal position
-    def go_to_pose_ik(self, goal_pose: PoseStamped, goal_configuration=None, interp_dist=0.001, interp_dist_joint=0.05): 
+    def go_to_pose_ik(self, goal_pose: PoseStamped, goal_configuration=None, interp_dist=0.001, interp_dist_joint=0.005): 
         # the goal pose should be of type PoseStamped. E.g. goal_pose=PoseStampled()
         # self.set_K.update_configuration({"max_delta_lin": 0.2})
         # self.set_K.update_configuration({"max_delta_ori": 0.5}) 
@@ -187,7 +187,10 @@ class Panda():
         # Check if the solution is valid
         if goal_configuration is not None:
              
-            step_num_joint = int(np.ceil(np.linalg.norm(goal_configuration - joint_start) / interp_dist_joint))
+            joint_distance = np.abs(np.subtract(joint_start, goal_configuration))
+            max_joint_distance = np.max(joint_distance)
+            step_num_joint = math.ceil(max_joint_distance / interp_dist_joint)
+            # step_num_joint = int(np.ceil(np.linalg.norm(goal_configuration - joint_start) / interp_dist_joint))
             step_num=np.max([step_num_joint,step_num_lin])+1
         
             pos_goal = np.vstack([np.linspace(start, end, step_num) for start, end in zip(position_start, [goal_pose.pose.position.x, goal_pose.pose.position.y, goal_pose.pose.position.z])]).T
