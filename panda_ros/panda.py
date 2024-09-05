@@ -100,7 +100,7 @@ class Panda():
         goal.header.stamp = rospy.Time.now()
 
         ns_msg = [0, 0, 0, -2.4, 0, 2.4, 0.8] #ensure that the elbow is upward
-        self.go_to_pose_ik(goal, goal_configuration=ns_msg, interp_dist=0.003, interp_dist_joint=0.025)
+        self.go_to_pose_ik(goal, goal_configuration=ns_msg)
 
     def home_gripper(self):
         self.homing_pub.publish(self.home_command)
