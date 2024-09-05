@@ -1,4 +1,6 @@
 import numpy as np
+import warnings
+warnings.filterwarnings("ignore", message=".*The 'nopython' keyword.*")
 import quaternion #numpy quaternion
 from geometry_msgs.msg import PoseStamped, Pose
 
