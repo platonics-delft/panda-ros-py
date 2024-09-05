@@ -100,7 +100,7 @@ class Panda():
         goal.header.stamp = rospy.Time.now()
 
         ns_msg = [0, 0, 0, -2.4, 0, 2.4, 0.8] #ensure that the elbow is upward
-        self.go_to_pose_ik(goal, goal_configuration=ns_msg)
+        self.go_to_pose_ik(goal, goal_configuration=ns_msg, interp_dist=0.003, interp_dist_joint=0.025)
 
     def home_gripper(self):
         self.homing_pub.publish(self.home_command)
@@ -143,7 +143,7 @@ class Panda():
         rospy.sleep(0.2)
     
         # control robot to desired goal position
-    def go_to_pose_ik(self, goal_pose: PoseStamped, goal_configuration=None, interp_dist=0.003, interp_dist_joint=0.05): 
+    def go_to_pose_ik(self, goal_pose: PoseStamped, goal_configuration=None, interp_dist=0.001, interp_dist_joint=0.05): 
         # the goal pose should be of type PoseStamped. E.g. goal_pose=PoseStampled()
         # self.set_K.update_configuration({"max_delta_lin": 0.2})
         # self.set_K.update_configuration({"max_delta_ori": 0.5}) 
@@ -250,7 +250,7 @@ class Panda():
             
             goal_pose = pos_quat_2_pose_st(goal_pos, quat_goal_new)
             self.goal_pub.publish(goal_pose) 
-            rospy.sleep(0.5)
+            rospy.sleep(0.2)
         
         
     def vibrate(self, duration: Float32):   
