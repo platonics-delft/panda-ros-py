@@ -84,7 +84,7 @@ def interpolate_poses(pose_start: PoseStamped, pose_goal: PoseStamped, interp_di
     
     step_num_polar = int(np.ceil(theta / interp_dist_polar))
     
-    step_num=np.max([step_num_polar,step_num_lin]) + 1
+    step_num=np.max([2,np.max([step_num_polar,step_num_lin]) + 1])
     
     x = np.linspace(position_start[0], position_goal[0], step_num)
     y = np.linspace(position_start[1], position_goal[1], step_num)
