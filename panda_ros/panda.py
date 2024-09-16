@@ -29,6 +29,7 @@ class Panda():
         self.curr_ori=None
         self.curr_pos_goal=None
         self.curr_ori_goal=None
+        self.goal_pose=None
         self.attractor_distance_threshold=0.05
         self.safety_check=True
         self.previous_safety_check=True
