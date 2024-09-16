@@ -108,8 +108,9 @@ class Panda():
     def stop_gripper(self):
         self.stop_pub.publish(self.stop_command)  
 
-    def force_feedback_callback(self, feedback):
-        self.force = feedback.wrench.force
+    def force_feedback_callback(self, wrench_st):
+        self.curr_wrench = wrench_st
+        self.force = wrench_st.wrench.force
         self.force_feedback = np.linalg.norm(np.array([self.force.x, self.force.y, self.force.z]))
 
     def joint_states_callback(self, data):
