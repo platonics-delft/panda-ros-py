@@ -19,8 +19,8 @@ class Panda():
     def __init__(self):
         super(Panda, self).__init__()
 
-        self.K_pos=2000
-        self.K_ori=30
+        self.K_pos=4000
+        self.K_ori=40
         self.K_ns=30
         self.K_pos_safe=600
         self.K_ori_safe=10
@@ -65,7 +65,7 @@ class Panda():
         self.move_command.goal.speed=1
         self.grasp_command.goal.epsilon.inner = 0.3
         self.grasp_command.goal.epsilon.outer = 0.3
-        self.grasp_command.goal.speed = 0.1
+        self.grasp_command.goal.speed = 0.05
         self.grasp_command.goal.force = 50
         self.grasp_command.goal.width = 1
 
@@ -145,7 +145,7 @@ class Panda():
         rospy.sleep(0.2)
     
         # control robot to desired goal position
-    def go_to_pose_ik(self, goal_pose: PoseStamped, goal_configuration=None, interp_dist=0.001, interp_dist_joint=0.005): 
+    def go_to_pose_ik(self, goal_pose: PoseStamped, goal_configuration=None, interp_dist=0.002, interp_dist_joint=0.005): 
         # the goal pose should be of type PoseStamped. E.g. goal_pose=PoseStampled()
         # self.set_K.update_configuration({"max_delta_lin": 0.2})
         # self.set_K.update_configuration({"max_delta_ori": 0.5}) 
