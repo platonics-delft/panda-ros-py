@@ -150,6 +150,8 @@ class Panda():
         # self.set_K.update_configuration({"max_delta_lin": 0.2})
         # self.set_K.update_configuration({"max_delta_ori": 0.5}) 
         r = rospy.Rate(100)
+        self.goal_pub.publish(self.curr_pose)
+        self.set_configuration(self.curr_joint)
 
         robot = rtb.models.Panda()
         position_start = self.curr_pos
@@ -199,6 +201,7 @@ class Panda():
             joint_goal = np.vstack([np.linspace(start, end, step_num) for start, end in zip(joint_start, goal_configuration)]).T
 
             # self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, 0)
+
             rospy.sleep(0.2)
             self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
             i=0
@@ -222,6 +225,7 @@ class Panda():
             self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, self.K_ori, self.K_ori, self.K_ori, 0)
 
             rospy.sleep(1) 
+            self.goal_pub.publish(goal_pose)
 
         else:
             print("No feasible joint configuration found or no joint configuration provided")
