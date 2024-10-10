@@ -73,16 +73,24 @@ def interpolate_poses(pose_start: PoseStamped, pose_goal: PoseStamped, interp_di
     # dist = np.sqrt(np.sum(np.subtract(start, goal_array)**2, axis=0))
     
     step_num_lin = int(np.ceil(dist_lin / interp_dist_linear))
-    quaternion_start = list_2_quaternion([pose_start.pose.orientation.w, pose_start.pose.orientation.x, pose_start.pose.orientation.y, pose_start.pose.orientation.z])
-    quaternion_goal = list_2_quaternion([pose_goal.pose.orientation.w, pose_goal.pose.orientation.x, pose_goal.pose.orientation.y, pose_goal.pose.orientation.z])
+    try:
+        quaternion_start = list_2_quaternion([pose_start.pose.orientation.w, pose_start.pose.orientation.x, pose_start.pose.orientation.y, pose_start.pose.orientation.z])
+        quaternion_goal = list_2_quaternion([pose_goal.pose.orientation.w, pose_goal.pose.orientation.x, pose_goal.pose.orientation.y, pose_goal.pose.orientation.z])
 
-    inner_prod= quaternion_start.x * quaternion_goal.x + quaternion_start.y * quaternion_goal.y + quaternion_start.z * quaternion_goal.z + quaternion_start.w * quaternion_goal.w
-    # print(inner_prod)
-    if inner_prod < 0: quaternion_start = -quaternion_start
-    inner_prod= quaternion_start.x * quaternion_goal.x + quaternion_start.y * quaternion_goal.y + quaternion_start.z * quaternion_goal.z + quaternion_start.w * quaternion_goal.w
-    theta= np.arccos(np.abs(inner_prod))
+        quaternion_start_norm = np.sqrt(quaternion_start.x**2 + quaternion_start.y**2 + quaternion_start.z**2 + quaternion_start.w**2)
+        quaternion_goal_norm = np.sqrt(quaternion_goal.x**2 + quaternion_goal.y**2 + quaternion_goal.z**2 + quaternion_goal.w**2)
+
+        inner_prod= quaternion_start.x * quaternion_goal.x + quaternion_start.y * quaternion_goal.y + quaternion_start.z * quaternion_goal.z + quaternion_start.w * quaternion_goal.w
+        if inner_prod < 0: quaternion_start = -quaternion_start
+        inner_prod= quaternion_start.x * quaternion_goal.x + quaternion_start.y * quaternion_goal.y + quaternion_start.z * quaternion_goal.z + quaternion_start.w * quaternion_goal.w
+        inner_prod= inner_prod / (quaternion_start_norm * quaternion_goal_norm)
+        theta= np.arccos(np.abs(inner_prod))
     
-    step_num_polar = int(np.ceil(theta / interp_dist_polar))
+        step_num_polar = int(np.ceil(theta / interp_dist_polar))
+    except Exception as e:
+        print("Zero division error in polar interpolation")
+        print(f"Exception {e}")
+        step_num_polar = 2
     
     step_num=np.max([2,np.max([step_num_polar,step_num_lin]) + 1])
     

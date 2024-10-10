@@ -32,8 +32,6 @@ class Panda():
         self.goal_pose=None
         self.attractor_distance_threshold=0.05
         self.safety_check=True
-        self.previous_safety_check=True
-        self.change_in_safety_check=False
 
         
         self.pos_sub=rospy.Subscriber("/cartesian_pose", PoseStamped, self.ee_pos_callback)
@@ -212,15 +210,6 @@ class Panda():
                 if self.safety_check:
                     i= i+1 
                 
-                if self.change_in_safety_check:
-                    if self.safety_check:
-                        self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
-                        # self.set_K.update_configuration({"max_delta_lin": 0.2})
-                        # self.set_K.update_configuration({"max_delta_ori": 0.5}) 
-                    else:
-                        self.set_stiffness(self.K_pos_safe, self.K_pos_safe, self.K_pos_safe, 0, 0, 0, 5)
-                        # self.set_K.update_configuration({"max_delta_lin": 0.05})
-                        # self.set_K.update_configuration({"max_delta_ori": 0.1})   
                 r.sleep()
             self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, self.K_ori, self.K_ori, self.K_ori, 0)
 
@@ -235,10 +224,8 @@ class Panda():
         if distance_pos < self.attractor_distance_threshold:
             self.safety_check = True
         else:
+            rospy.logwarn(f"Safety has been violated with distance {distance_pos}")
             self.safety_check = False
-        if self.safety_check != self.previous_safety_check:
-            self.change_in_safety_check = True
-        self.previous_safety_check = self.safety_check
 
 
     def offset_compensator(self, steps):
