@@ -3,6 +3,7 @@
 import rospy
 import math
 import numpy as np
+import quaternion
 import warnings
 warnings.filterwarnings("ignore", message=".*The 'nopython' keyword.*")
 from sensor_msgs.msg import JointState
