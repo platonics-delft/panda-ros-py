@@ -1,0 +1,2 @@
+spatialmath-python
+numpy
