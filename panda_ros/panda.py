@@ -5,7 +5,6 @@ import math
 import numpy as np
 import warnings
 warnings.filterwarnings("ignore", message=".*The 'nopython' keyword.*")
-import quaternion # pip install numpy-quaternion
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from std_msgs.msg import Float32MultiArray, Float32
