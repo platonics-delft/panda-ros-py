@@ -1,3 +1,4 @@
 spatialmath-python
 numpy
 roboticstoolbox-python
+numpy-quaternion
