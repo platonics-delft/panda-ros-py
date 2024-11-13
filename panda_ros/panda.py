@@ -4,13 +4,11 @@ import rospy
 import math
 import numpy as np
 import quaternion
-import warnings
-warnings.filterwarnings("ignore", message=".*The 'nopython' keyword.*")
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from std_msgs.msg import Float32MultiArray, Float32
 import dynamic_reconfigure.client
-from panda_ros.franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
+from franka_gripper.msg import GraspActionGoal, HomingActionGoal, StopActionGoal, MoveActionGoal
 from panda_ros.pose_transform_functions import  pos_quat_2_pose_st, list_2_quaternion, pose_2_transformation, interpolate_poses
 from spatialmath import SE3 #pip install spatialmath-python
 from spatialmath.base import q2r
