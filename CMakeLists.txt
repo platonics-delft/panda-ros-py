@@ -4,6 +4,8 @@ project(panda_ros)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
+  franka_gripper
+  franka_msgs
 )
 
 catkin_package()
