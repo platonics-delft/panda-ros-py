@@ -13,6 +13,7 @@ from panda_ros.pose_transform_functions import  pos_quat_2_pose_st, list_2_quate
 from spatialmath import SE3 #pip install spatialmath-python
 from spatialmath.base import q2r
 import roboticstoolbox as rtb #pip install roboticstoolbox-python
+
 class Panda():
     def __init__(self):
         super(Panda, self).__init__()
@@ -148,6 +149,7 @@ class Panda():
         r = rospy.Rate(100)
         self.goal_pub.publish(self.curr_pose)
         self.set_configuration(self.curr_joint)
+        self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
 
         robot = rtb.models.Panda()
         position_start = self.curr_pos
@@ -198,8 +200,6 @@ class Panda():
 
             # self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, 0)
 
-            rospy.sleep(0.2)
-            self.set_stiffness(self.K_pos, self.K_pos, self.K_pos, 0, 0, 0, self.K_ns)
             i=0
             while i < step_num:
                 pose_goal = pos_quat_2_pose_st(pos_goal[i], q_goal)  
